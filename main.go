@@ -2,22 +2,31 @@ package main
 
 import (
 	"log"
-	"os"
 	"time"
 
+	"github.com/cepmap/party-finder-bot/internal/config"
+	"github.com/cepmap/party-finder-bot/internal/dbconnector"
 	"github.com/cepmap/party-finder-bot/internal/handlers"
 	tele "gopkg.in/telebot.v4"
 )
 
 func main() {
-	log.Println("Starting bot")
-	token, err := os.ReadFile("token")
+	// Загружаем конфигурацию
+	cfg := config.Load(".env")
+
+	db, err := dbconnector.NewDBConnectorFromConfig(cfg)
 	if err != nil {
 		log.Fatal(err)
 		return
 	}
+
+	// Проверяем и создаем админов в БД
+	if err := db.EnsureAdminsExists(cfg.AdminTelegramIDs); err != nil {
+		log.Printf("Warning: failed to ensure admins exist: %v", err)
+	}
+
 	pref := tele.Settings{
-		Token:  string(token),
+		Token:  cfg.BotToken,
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
 	}
 
@@ -27,8 +36,9 @@ func main() {
 		return
 	}
 
-	h := handlers.NewHandlers()
+	h := handlers.NewHandlers(db, cfg)
 	h.Register(b)
 
+	log.Printf("Bot started")
 	b.Start()
 }
